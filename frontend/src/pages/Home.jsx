@@ -16,6 +16,7 @@ function Home() {
   const recognitionRef=useRef(null)
   const [ham,setHam]=useState(false)
   const isRecognizingRef=useRef(false)
+  const isProcessingRef=useRef(false)
   const synth=window.speechSynthesis
 
   const handleLogOut=async ()=>{
@@ -31,7 +32,7 @@ function Home() {
 
   const startRecognition = () => {
     
-   if (!isSpeakingRef.current && !isRecognizingRef.current) {
+   if (!isSpeakingRef.current && !isProcessingRef.current && !isRecognizingRef.current) {
     try {
       recognitionRef.current?.start();
       console.log("Recognition requested to start");
@@ -97,6 +98,11 @@ synth.speak(utterence);
 
 useEffect(() => {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    setAiText("Voice recognition is not supported in this browser. Try Chrome or Edge.")
+    return undefined
+  }
+
   const recognition = new SpeechRecognition();
 
   recognition.continuous = true;
@@ -129,7 +135,7 @@ useEffect(() => {
   recognition.onend = () => {
     isRecognizingRef.current = false;
     setListening(false);
-    if (isMounted && !isSpeakingRef.current) {
+    if (isMounted && !isSpeakingRef.current && !isProcessingRef.current) {
       setTimeout(() => {
         if (isMounted) {
           try {
@@ -147,7 +153,11 @@ useEffect(() => {
     console.warn("Recognition error:", event.error);
     isRecognizingRef.current = false;
     setListening(false);
-    if (event.error !== "aborted" && isMounted && !isSpeakingRef.current) {
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      setAiText("Microphone access is blocked. Allow microphone access in your browser, then refresh.")
+      return
+    }
+    if (event.error !== "aborted" && isMounted && !isSpeakingRef.current && !isProcessingRef.current) {
       setTimeout(() => {
         if (isMounted) {
           try {
@@ -163,16 +173,27 @@ useEffect(() => {
 
   recognition.onresult = async (e) => {
     const transcript = e.results[e.results.length - 1][0].transcript.trim();
-    if (transcript.toLowerCase().includes(userData.assistantName.toLowerCase())) {
+    const assistantName = userData?.assistantName?.trim()
+    if (assistantName && transcript.toLowerCase().includes(assistantName.toLowerCase()) && !isProcessingRef.current) {
       setAiText("");
       setUserText(transcript);
+      isProcessingRef.current = true
       recognition.stop();
       isRecognizingRef.current = false;
       setListening(false);
-      const data = await getGeminiResponse(transcript);
-      handleCommand(data);
-      setAiText(data.response);
-      setUserText("");
+      try {
+        const data = await getGeminiResponse(transcript);
+        if (!data?.response) throw new Error("The assistant returned an empty response. Please try again.")
+        handleCommand(data);
+        setAiText(data.response);
+      } catch (error) {
+        const message = error.message || "The assistant couldn't answer. Please try again."
+        setAiText(message)
+        speak(message)
+      } finally {
+        setUserText("")
+        isProcessingRef.current = false
+      }
     }
   };
 
@@ -180,7 +201,7 @@ useEffect(() => {
     const greeting = new SpeechSynthesisUtterance(`Hello ${userData.name}, what can I help you with?`);
     greeting.lang = 'hi-IN';
    
-    window.speechSynthesis.speak(greeting);
+    speak(greeting.text);
  
 
   return () => {
@@ -220,6 +241,7 @@ useEffect(() => {
 <img src={userData?.assistantImage} alt="" className='h-full object-cover'/>
       </div>
       <h1 className='text-white text-[18px] font-semibold'>I'm {userData?.assistantName}</h1>
+      <p className='text-white/70 text-sm'>{listening ? `Listening — say “${userData?.assistantName}” and your question` : "Starting microphone…"}</p>
       {!aiText && <img src={userImg} alt="" className='w-[200px]'/>}
       {aiText && <img src={aiImg} alt="" className='w-[200px]'/>}
     

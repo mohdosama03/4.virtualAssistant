@@ -18,12 +18,13 @@ function UserContext({children}) {
     }
 
     const getGeminiResponse=async (command)=>{
-try {
-  const result=await axios.post(`${serverUrl}/api/user/asktoassistant`,{command},{withCredentials:true})
-  return result.data
-} catch (error) {
-  console.log(error)
-}
+        try {
+            const result=await axios.post(`${serverUrl}/api/user/asktoassistant`,{command},{withCredentials:true})
+            return result.data
+        } catch (error) {
+            const message=error.response?.data?.response || "I couldn't reach the assistant service. Check that the backend is running, then try again."
+            throw new Error(message)
+        }
     }
 
     useEffect(()=>{

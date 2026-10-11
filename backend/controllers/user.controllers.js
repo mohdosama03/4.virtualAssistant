@@ -40,45 +40,59 @@ return res.status(200).json(user)
 
 export const askToAssistant=async (req,res)=>{
    try {
-      const {command}=req.body
+      const command = typeof req.body?.command === "string" ? req.body.command.trim() : ""
+      if (!command) {
+         return res.status(400).json({ response: "Please say or type a question first." })
+      }
+
       const user=await User.findById(req.userId);
+      if (!user) {
+         return res.status(404).json({ response: "Your account could not be found. Please sign in again." })
+      }
       user.history.push(command)
-      user.save()
+      await user.save()
       const userName=user.name
       const assistantName=user.assistantName
       const result=await geminiResponse(command,assistantName,userName)
 
-      const jsonMatch=result.match(/{[\s\S]*}/)
+      const jsonMatch=typeof result === "string" ? result.match(/{[\s\S]*}/) : null
       if(!jsonMatch){
-         return res.ststus(400).json({response:"sorry, i can't understand"})
+         return res.status(502).json({response:"I couldn't understand the AI service response. Please try again."})
       }
-      const gemResult=JSON.parse(jsonMatch[0])
-      console.log(gemResult)
+      let gemResult
+      try {
+         gemResult=JSON.parse(jsonMatch[0])
+      } catch {
+         return res.status(502).json({response:"I couldn't understand the AI service response. Please try again."})
+      }
+
       const type=gemResult.type
+      const userInput=typeof gemResult.userInput === "string" ? gemResult.userInput : command
+      const response=typeof gemResult.response === "string" ? gemResult.response : "I'm sorry, I couldn't create a response. Please try again."
 
       switch(type){
          case 'get-date' :
             return res.json({
                type,
-               userInput:gemResult.userInput,
+               userInput,
                response:`current date is ${moment().format("YYYY-MM-DD")}`
             });
             case 'get-time':
                 return res.json({
                type,
-               userInput:gemResult.userInput,
+               userInput,
                response:`current time is ${moment().format("hh:mm A")}`
             });
              case 'get-day':
                 return res.json({
                type,
-               userInput:gemResult.userInput,
+               userInput,
                response:`today is ${moment().format("dddd")}`
             });
             case 'get-month':
                 return res.json({
                type,
-               userInput:gemResult.userInput,
+               userInput,
                response:`today is ${moment().format("MMMM")}`
             });
       case 'google-search':
@@ -91,8 +105,8 @@ export const askToAssistant=async (req,res)=>{
        case "weather-show" :
          return res.json({
             type,
-            userInput:gemResult.userInput,
-            response:gemResult.response,
+            userInput,
+            response,
          });
 
          default:
@@ -101,6 +115,11 @@ export const askToAssistant=async (req,res)=>{
      
 
    } catch (error) {
-  return res.status(500).json({ response: "ask assistant error" })
+  console.error("Assistant request failed:", error.response?.data || error.message)
+  return res.status(error.status || (error.response ? 502 : 500)).json({
+     response: error.status === 503
+        ? error.message
+        : "I couldn't get a response right now. Please check the backend and try again."
+  })
    }
 }
