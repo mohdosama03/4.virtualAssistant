@@ -116,10 +116,21 @@ export const askToAssistant=async (req,res)=>{
 
    } catch (error) {
   console.error("Assistant request failed:", error.response?.data || error.message)
-  return res.status(error.status || (error.response ? 502 : 500)).json({
-     response: error.status === 503
-        ? error.message
-        : "I couldn't get a response right now. Please check the backend and try again."
-  })
+  const upstreamStatus = error.response?.status
+  let response = "I couldn't get a response right now. Please check the backend and try again."
+
+  if (error.status === 503) {
+     response = error.message
+  } else if ([400, 401, 403].includes(upstreamStatus)) {
+     response = "Gemini rejected the request. Check that GEMINI_API_KEY is valid and GEMINI_MODEL is supported."
+  } else if (upstreamStatus === 404) {
+     response = "The configured Gemini model was not found. Check GEMINI_MODEL in backend/.env."
+  } else if (upstreamStatus === 429) {
+     response = "Gemini's request quota is exhausted. Check your Google AI Studio project quota and try again later."
+  } else if (upstreamStatus >= 500) {
+     response = "Gemini is temporarily unavailable. Please try again shortly."
+  }
+
+  return res.status(error.status || (upstreamStatus ? 502 : 500)).json({ response })
    }
 }

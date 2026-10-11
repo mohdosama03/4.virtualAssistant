@@ -241,7 +241,7 @@ useEffect(() => {
 <img src={userData?.assistantImage} alt="" className='h-full object-cover'/>
       </div>
       <h1 className='text-white text-[18px] font-semibold'>I'm {userData?.assistantName}</h1>
-      <p className='text-white/70 text-sm'>{listening ? `Listening — say “${userData?.assistantName}” and your question` : "Starting microphone…"}</p>
+      <p className='text-white/70 text-sm'>{listening ? `Listening — say “${userData?.assistantName}” and your question` : userText ? "Thinking…" : "Waiting for microphone…"}</p>
       {!aiText && <img src={userImg} alt="" className='w-[200px]'/>}
       {aiText && <img src={aiImg} alt="" className='w-[200px]'/>}
     
