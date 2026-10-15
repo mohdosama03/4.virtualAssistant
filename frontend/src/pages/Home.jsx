@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { userDataContext } from '../context/UserContext'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
@@ -31,7 +31,7 @@ function Home() {
     }
   }
 
-  const startRecognition = () => {
+  const startRecognition = useCallback(() => {
     
    if (!isSpeakingRef.current && !isProcessingRef.current && !isRecognizingRef.current) {
     try {
@@ -44,9 +44,9 @@ function Home() {
     }
   }
     
-  }
+  }, [])
 
-  const speak=(text)=>{
+  const speak=useCallback((text)=>{
     const utterence=new SpeechSynthesisUtterance(text)
     utterence.lang = 'en-US';
     const voices =window.speechSynthesis.getVoices()
@@ -66,9 +66,9 @@ function Home() {
     }
    synth.cancel(); // 🛑 pehle se koi speech ho to band karo
 synth.speak(utterence);
-  }
+  }, [startRecognition, synth])
 
-  const handleCommand=(data)=>{
+  const handleCommand=useCallback((data)=>{
     const {type,userInput,response}=data
       speak(response);
     
@@ -95,9 +95,9 @@ synth.speak(utterence);
       window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
     }
 
-  }
+  }, [speak])
 
-  const askAssistant = async (question) => {
+  const askAssistant = useCallback(async (question) => {
     const command = question.trim()
     if (!command || isProcessingRef.current) return
 
@@ -121,7 +121,7 @@ synth.speak(utterence);
       setTypedText("")
       isProcessingRef.current = false
     }
-  }
+  }, [getGeminiResponse, handleCommand, speak])
 
   const handleTypedQuestion = (event) => {
     event.preventDefault()
@@ -235,7 +235,7 @@ useEffect(() => {
     setListening(false);
     isRecognizingRef.current = false;
   };
-}, [userData?.name, userData?.assistantName]);
+}, [askAssistant, speak, userData?.name, userData?.assistantName]);
 
 
 

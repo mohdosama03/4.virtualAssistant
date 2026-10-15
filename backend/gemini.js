@@ -23,7 +23,7 @@ const geminiResponse = async (command, assistantName, userName) => {
     throw error
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash"
+  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash"
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
   const prompt = `You are ${assistantName}, a voice assistant created by ${userName}.
 Classify the user's request and respond with one JSON object only. Do not use markdown fences.

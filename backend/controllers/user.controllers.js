@@ -124,7 +124,7 @@ export const askToAssistant=async (req,res)=>{
   } else if ([400, 401, 403].includes(upstreamStatus)) {
      response = "Gemini rejected the request. Check that GEMINI_API_KEY is valid and GEMINI_MODEL is supported."
   } else if (upstreamStatus === 404) {
-     response = "The configured Gemini model was not found. Check GEMINI_MODEL in backend/.env."
+     response = "Gemini could not find or access the configured model. Set GEMINI_MODEL to a model enabled for your API key, then restart the backend."
   } else if (upstreamStatus === 429) {
      response = "Gemini's request quota is exhausted. Check your Google AI Studio project quota and try again later."
   } else if (upstreamStatus >= 500) {
