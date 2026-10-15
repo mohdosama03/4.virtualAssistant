@@ -12,6 +12,7 @@ function Home() {
   const [listening,setListening]=useState(false)
   const [userText,setUserText]=useState("")
   const [aiText,setAiText]=useState("")
+  const [typedText,setTypedText]=useState("")
   const isSpeakingRef=useRef(false)
   const recognitionRef=useRef(null)
   const [ham,setHam]=useState(false)
@@ -47,11 +48,11 @@ function Home() {
 
   const speak=(text)=>{
     const utterence=new SpeechSynthesisUtterance(text)
-    utterence.lang = 'hi-IN';
+    utterence.lang = 'en-US';
     const voices =window.speechSynthesis.getVoices()
-    const hindiVoice = voices.find(v => v.lang === 'hi-IN');
-    if (hindiVoice) {
-      utterence.voice = hindiVoice;
+    const englishVoice = voices.find(v => v.lang.toLowerCase().startsWith('en-'));
+    if (englishVoice) {
+      utterence.voice = englishVoice;
     }
 
 
@@ -94,6 +95,37 @@ synth.speak(utterence);
       window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
     }
 
+  }
+
+  const askAssistant = async (question) => {
+    const command = question.trim()
+    if (!command || isProcessingRef.current) return
+
+    setAiText("")
+    setUserText(command)
+    isProcessingRef.current = true
+    recognitionRef.current?.stop()
+    isRecognizingRef.current = false
+    setListening(false)
+    try {
+      const data = await getGeminiResponse(command)
+      if (!data?.response) throw new Error("The assistant returned an empty response. Please try again.")
+      handleCommand(data)
+      setAiText(data.response)
+    } catch (error) {
+      const message = error.message || "The assistant couldn't answer. Please try again."
+      setAiText(message)
+      speak(message)
+    } finally {
+      setUserText("")
+      setTypedText("")
+      isProcessingRef.current = false
+    }
+  }
+
+  const handleTypedQuestion = (event) => {
+    event.preventDefault()
+    void askAssistant(typedText)
   }
 
 useEffect(() => {
@@ -174,32 +206,24 @@ useEffect(() => {
   recognition.onresult = async (e) => {
     const transcript = e.results[e.results.length - 1][0].transcript.trim();
     const assistantName = userData?.assistantName?.trim()
-    if (assistantName && transcript.toLowerCase().includes(assistantName.toLowerCase()) && !isProcessingRef.current) {
+    if (transcript && !isProcessingRef.current) {
       setAiText("");
-      setUserText(transcript);
-      isProcessingRef.current = true
       recognition.stop();
       isRecognizingRef.current = false;
       setListening(false);
-      try {
-        const data = await getGeminiResponse(transcript);
-        if (!data?.response) throw new Error("The assistant returned an empty response. Please try again.")
-        handleCommand(data);
-        setAiText(data.response);
-      } catch (error) {
-        const message = error.message || "The assistant couldn't answer. Please try again."
-        setAiText(message)
-        speak(message)
-      } finally {
-        setUserText("")
-        isProcessingRef.current = false
-      }
+      const escapedName = assistantName?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      const question = escapedName
+        ? transcript.replace(new RegExp(`\\b${escapedName}\\b[, ]*`, "ig"), "").trim()
+        : transcript
+      await askAssistant(question || transcript)
     }
   };
 
 
+    if (!userData?.name) return undefined
+
     const greeting = new SpeechSynthesisUtterance(`Hello ${userData.name}, what can I help you with?`);
-    greeting.lang = 'hi-IN';
+    greeting.lang = 'en-US';
    
     speak(greeting.text);
  
@@ -211,7 +235,7 @@ useEffect(() => {
     setListening(false);
     isRecognizingRef.current = false;
   };
-}, []);
+}, [userData?.name, userData?.assistantName]);
 
 
 
@@ -241,7 +265,18 @@ useEffect(() => {
 <img src={userData?.assistantImage} alt="" className='h-full object-cover'/>
       </div>
       <h1 className='text-white text-[18px] font-semibold'>I'm {userData?.assistantName}</h1>
-      <p className='text-white/70 text-sm'>{listening ? `Listening — say “${userData?.assistantName}” and your question` : userText ? "Thinking…" : "Waiting for microphone…"}</p>
+      <p className='text-white/70 text-sm'>{listening ? `Listening — ask a question directly, or say “${userData?.assistantName}” first` : userText ? "Thinking…" : "Waiting for microphone…"}</p>
+      <form onSubmit={handleTypedQuestion} className='flex w-[90%] max-w-[560px] gap-2'>
+        <input
+          aria-label='Ask a question'
+          type='text'
+          value={typedText}
+          onChange={(event) => setTypedText(event.target.value)}
+          placeholder='Type a question or command'
+          className='min-w-0 flex-1 rounded-full border border-white/50 bg-black/30 px-5 py-3 text-white placeholder:text-white/60 outline-none focus:border-blue-300'
+        />
+        <button type='submit' disabled={!typedText.trim() || isProcessingRef.current} className='rounded-full bg-white px-5 py-3 font-semibold text-black disabled:opacity-50'>Ask</button>
+      </form>
       {!aiText && <img src={userImg} alt="" className='w-[200px]'/>}
       {aiText && <img src={aiImg} alt="" className='w-[200px]'/>}
     
