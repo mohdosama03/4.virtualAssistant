@@ -19,12 +19,14 @@ const geminiResponse = async (command, assistantName, userName) => {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     const error = new Error("Gemini is not configured. Add GEMINI_API_KEY to backend/.env.")
+    error.isConfigError = true
     error.status = 503
     throw error
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash"
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
+  const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash"
+  const candidateModels = Array.from(new Set([primaryModel, "gemini-3.5-flash", "gemini-3.7-flash", "gemini-flash-latest"]))
+
   const prompt = `You are ${assistantName}, a voice assistant created by ${userName}.
 Classify the user's request and respond with one JSON object only. Do not use markdown fences.
 
@@ -35,25 +37,42 @@ Use "general" for questions that need a spoken answer. Use "google-search" when 
 
 User request: ${JSON.stringify(command)}`
 
-  const result = await axios.post(
-    apiUrl,
-    { contents: [{ parts: [{ text: prompt }] }] },
-    {
-      headers: { "x-goog-api-key": apiKey },
-      timeout: 30000,
-    },
-  )
+  let lastError = null
 
-  const text = result.data?.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text || "")
-    .join("")
-    .trim()
+  for (const model of candidateModels) {
+    try {
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
+      const result = await axios.post(
+        apiUrl,
+        { contents: [{ parts: [{ text: prompt }] }] },
+        {
+          headers: { "x-goog-api-key": apiKey },
+          timeout: 20000,
+        },
+      )
 
-  if (!text) {
-    throw new Error("Gemini returned an empty response.")
+      const text = result.data?.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text || "")
+        .join("")
+        .trim()
+
+      if (text) {
+        return text
+      }
+    } catch (error) {
+      lastError = error
+      const status = error.response?.status
+      // If the error is 503 (high demand), 429 (quota), or 404 (model not found), try the next candidate model
+      if (status === 503 || status === 429 || status === 404) {
+        console.warn(`Model ${model} returned ${status}. Attempting fallback model...`)
+        continue
+      }
+      // For auth errors (400, 401, 403), stop trying
+      throw error
+    }
   }
 
-  return text
+  throw lastError || new Error("Gemini returned an empty response.")
 }
 
 export default geminiResponse
